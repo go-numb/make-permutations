@@ -5,10 +5,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/gocarina/gocsv"
 	"github.com/labstack/gommon/log"
 )
 
@@ -36,12 +38,12 @@ type D struct {
 }
 
 type NFT struct {
-	ID   int
-	Hash string
-	Name string
+	ID   int    `csv:"id"`
+	Hash string `csv:"hash"`
+	Name string `csv:"name"`
 	// 構成部をkeyにし構成内容をmap
-	InnerHash map[int]string
-	CreatedAt time.Time
+	InnerHash map[int]D `csv:"inner_hash"`
+	CreatedAt time.Time `csv:"created_at"`
 }
 
 /*
@@ -156,7 +158,7 @@ func main() {
 		nfts[i] = NFT{
 			ID:        i,
 			Name:      fmt.Sprintf("hoge_%d", i),
-			InnerHash: map[int]string{},
+			InnerHash: map[int]D{},
 			CreatedAt: time.Now(),
 		}
 
@@ -165,7 +167,7 @@ func main() {
 		for j := range results[i] {
 			for k := range df {
 				if results[i][j] == df[k].PermHash {
-					nfts[i].InnerHash[df[k].CategoryID] = df[k].PermHash
+					nfts[i].InnerHash[df[k].CategoryID] = df[k]
 				}
 			}
 		}
@@ -173,6 +175,17 @@ func main() {
 
 	for i := range nfts {
 		fmt.Printf("%d - %v\n", i, nfts[i])
+	}
+
+	// Save the data
+	f, err := os.Create("./data.csv")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	if err := gocsv.MarshalFile(nfts, f); err != nil {
+		log.Fatal()
 	}
 
 }

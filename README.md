@@ -7,8 +7,9 @@
 
 ## Implemented
 - imagesフォルダから各部品カテゴリとファイルデータを生成
+- Hash文字列生成
 - カテゴリ内重複なし順列
-
+- NFT Dataの保存
 
 
 ## TODO 
