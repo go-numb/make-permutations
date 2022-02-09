@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	DIRROOT        = "C:/Users/numbp/go_projects/src/github.com/go-numb/make-permutations/images"
+	DIRROOT        = "../images"
 	CATEGORYPREFIX = "_"
 )
 
