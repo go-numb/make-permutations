@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gocarina/gocsv"
+	json "github.com/dustin/gojson"
 	"github.com/labstack/gommon/log"
 )
 
@@ -42,7 +42,7 @@ type NFT struct {
 	Hash string `csv:"hash"`
 	Name string `csv:"name"`
 	// 構成部をkeyにし構成内容をmap
-	InnerHash map[int]D `csv:"inner_hash"`
+	InnerHash []D       `csv:"inner_hash"`
 	CreatedAt time.Time `csv:"created_at"`
 }
 
@@ -82,7 +82,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Infof("%#v\n", patterns)
+	log.Infof("%v", patterns[len(patterns)-1])
 
 	// ファイルを内包しているもののみを使用する
 	var categoriesN int
@@ -143,64 +143,97 @@ func main() {
 	fmt.Println("使用部品種: ", categoriesN)
 	fmt.Printf("ファイル数: %d, hash数: %d\n", filen, len(str))
 
-	index = 0
-
-	var inputs = make([][]string, categoriesN)
+	// カテゴリ数を数える
+	numbers := make([]int, categoriesN)
 
 	for i := range df {
-		inputs[df[i].CategoryID] = append(inputs[df[i].CategoryID], df[i].PermHash)
+		numbers[df[i].CategoryID]++
 	}
 
-	results := pairs(inputs)
+	fmt.Printf("カテゴリ別ファイル数: %v", numbers)
 
-	nfts := make([]NFT, len(results))
-	for i := range results {
-		nfts[i] = NFT{
-			ID:        i,
-			Name:      fmt.Sprintf("hoge_%d", i),
-			InnerHash: map[int]D{},
-			CreatedAt: time.Now(),
+	// map[pattern][4]int
+	var pattern int = numbers[0]
+	for i := range numbers {
+		if len(numbers) == i+1 {
+			break
 		}
+		pattern *= numbers[i+1]
+	}
 
-		nfts[i].Hash = fmt.Sprintf("hoge_%d_%s", i, nfts[i].CreatedAt.String())
+	fmt.Printf("パターン総数: %d\n", pattern)
 
+	// カテゴリごとの配列を作る
+	arrays := make(map[int][]int, categoriesN)
+	for i := range df {
+		arrays[df[i].CategoryID] = append(arrays[df[i].CategoryID], df[i].ID)
+	}
+
+	fmt.Printf("カテゴリ別ファイルID配列%v\n", arrays)
+
+	// var currentCategories int
+	results := make([][4]int, pattern)
+	fmt.Printf("%d -- %#v", len(results), results)
+	var (
+		// i = パターン総数
+		// j = カテゴリID
+		// k = カテゴリ内ファイル配列
+		k int = 0
+	)
+
+	fmt.Printf("%d\n", len(arrays))
+
+	for j := 0; j < len(arrays); j++ {
+		for i := range results {
+			if i != 0 && i%len(arrays[j]) == 0 {
+				k = 0
+			}
+
+			results[i][j] = arrays[j][k]
+			// カテゴリ内のファイルを一通り代入したら繰り上げる
+			k++
+		}
+		k = 0
+	}
+
+	if pattern != len(results) {
+		log.Fatal("事前計算したパターン数と実際組み合わせたパターン数が違う")
+	}
+	fmt.Printf("事前計算したパターン数 == 実際組み合わせたパターン数\n%d == %d\n", pattern, len(results))
+
+	NFTs := make([]NFT, len(results))
+	for i := range results {
+		inner := make([]D, categoriesN)
+		name := "" // The 適当
 		for j := range results[i] {
 			for k := range df {
-				if results[i][j] == df[k].PermHash {
-					nfts[i].InnerHash[df[k].CategoryID] = df[k]
+				if results[i][j] == df[k].ID {
+					inner[df[k].CategoryID] = df[k]
+					name += df[k].Name
 				}
 			}
 		}
+
+		// 組み合わせた名前から適当に
+		hash := sha256.Sum256([]byte(name))
+		NFTs[i] = NFT{
+			ID:        i,
+			Hash:      hex.EncodeToString([]byte(hash[:])),
+			Name:      name,
+			InnerHash: inner,
+			CreatedAt: time.Now(),
+		}
 	}
 
-	for i := range nfts {
-		fmt.Printf("%d - %v\n", i, nfts[i])
-	}
+	f, _ := os.Create("data.csv")
+	defer f.Close()
 
-	// Save the data
-	f, err := os.Create("./data.csv")
+	b, err := json.Marshal(NFTs)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer f.Close()
 
-	if err := gocsv.MarshalFile(nfts, f); err != nil {
-		log.Fatal()
-	}
+	fmt.Printf("%s", string(b))
 
-}
-
-func pairs(words [][]string) [][]string {
-	var pairs [][]string
-	for i := range words {
-		for _, word := range words[i] {
-			if i+1 >= len(words) {
-				break
-			}
-			for _, word1 := range words[i+1] {
-				pairs = append(pairs, []string{word, word1})
-			}
-		}
-	}
-	return pairs
+	f.Write(b)
 }
